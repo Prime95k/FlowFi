@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FLOWFI — Follow the Flow of Your Crypto</title>
+  <meta name="description" content="Track wallet inflows, outflows, balances and full blockchain transaction history across Ethereum and BNB Smart Chain." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#03050f;--surface:#0b1128;--surface2:#101830;--surface3:#152040;
+      --border:#1a2848;--border2:#243560;
+      --eth:#627EEA;--bsc:#F3BA2F;--green:#00e5a0;--red:#ff4060;--yellow:#ffd166;--purple:#a78bfa;
+      --text:#dce8ff;--text2:#7a92c4;--text3:#3d527a;
+      --r:14px;--rs:8px;
+    }
+    html{scroll-behavior:smooth}
+    body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;min-height:100vh;overflow-x:hidden}
+    .mono{font-family:'JetBrains Mono',monospace}
+
+    #bg-canvas{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5}
+    .bg-grid{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(26,40,72,.22) 1px,transparent 1px),linear-gradient(90deg,rgba(26,40,72,.22) 1px,transparent 1px);background-size:48px 48px}
+    .bg-orb{position:fixed;border-radius:50%;filter:blur(140px);pointer-events:none;z-index:0}
+    .orb1{width:700px;height:700px;top:-250px;left:-200px;background:radial-gradient(circle,rgba(98,126,234,.13),transparent 70%)}
+    .orb2{width:600px;height:600px;bottom:-150px;right:-150px;background:radial-gradient(circle,rgba(0,229,160,.08),transparent 70%)}
+    .orb3{width:450px;height:450px;top:35%;left:38%;background:radial-gradient(circle,rgba(167,139,250,.06),transparent 70%)}
+
+    .glass{background:rgba(11,17,40,.78);border:1px solid var(--border);border-radius:var(--r);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);position:relative;overflow:hidden}
+    .glass::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.032) 0%,transparent 55%);border-radius:var(--r);pointer-events:none}
+
+    nav{display:flex;align-items:center;justify-content:space-between;padding:18px 48px;border-bottom:1px solid var(--border);background:rgba(3,5,15,.88);backdrop-filter:blur(24px);position:sticky;top:0;z-index:200}
+    .logo{font-size:24px;font-weight:900;letter-spacing:-1px;cursor:pointer;background:linear-gradient(135deg,#dce8ff 30%,var(--eth));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .logo .a{background:linear-gradient(135deg,var(--green),var(--eth));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .nav-right{display:flex;align-items:center;gap:12px}
+    .cpill{display:flex;align-items:center;gap:5px;padding:5px 13px;border-radius:999px;font-size:12px;font-weight:700}
+
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:11px 22px;border-radius:var(--rs);font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;border:none;white-space:nowrap;text-decoration:none}
+    .btn-p{background:linear-gradient(135deg,#253ba0,var(--eth));color:#fff;box-shadow:0 4px 24px rgba(98,126,234,.35)}
+    .btn-p:hover{transform:translateY(-2px);box-shadow:0 8px 36px rgba(98,126,234,.55)}
+    .btn-g{background:rgba(255,255,255,.045);color:var(--text2);border:1px solid var(--border)}
+    .btn-g:hover{background:rgba(255,255,255,.09);color:var(--text);border-color:var(--border2)}
+    .btn-y{background:rgba(255,209,102,.12);color:var(--yellow);border:1px solid rgba(255,209,102,.3)}
+    .btn-y:hover{background:rgba(255,209,102,.2)}
+    .btn-sm{padding:7px 14px;font-size:12px;border-radius:6px}
+    .btn-ic{padding:8px 10px}
+    .btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+
+    .page{display:none;position:relative;z-index:1}
+    .page.active{display:block}
+
+    .hero{min-height:92vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:80px 24px 60px}
+    .hero-badge{display:inline-flex;align-items:center;gap:8px;padding:7px 18px;border-radius:999px;border:1px solid rgba(98,126,234,.35);background:rgba(98,126,234,.09);font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--eth);margin-bottom:36px;animation:fadeUp .6s ease both}
+    .hero h1{font-size:clamp(46px,8vw,96px);font-weight:900;line-height:.95;letter-spacing:-3px;margin-bottom:28px;animation:fadeUp .6s .1s ease both}
+    .g1{background:linear-gradient(135deg,#dce8ff 40%,var(--eth));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .g2{background:linear-gradient(135deg,var(--eth),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .hero-sub{font-size:clamp(15px,2vw,19px);color:var(--text2);font-weight:400;max-width:620px;line-height:1.75;margin-bottom:52px;animation:fadeUp .6s .2s ease both}
+    .input-block{width:100%;max-width:700px;animation:fadeUp .6s .3s ease both}
+
+    .api-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 18px;border-radius:10px;background:rgba(255,209,102,.05);border:1px solid rgba(255,209,102,.18);margin-bottom:8px}
+    .api-bar label{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--yellow);white-space:nowrap}
+    .api-bar input{flex:1;min-width:200px;padding:8px 14px;background:rgba(0,0,0,.35);border:1px solid rgba(255,209,102,.2);border-radius:6px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:12px;outline:none;transition:border .2s}
+    .api-bar input:focus{border-color:var(--yellow)}
+    .api-note{font-size:11px;color:var(--text3);margin-bottom:14px;text-align:left}
+    .api-note a{color:var(--eth);text-decoration:none}
+    .api-note a:hover{text-decoration:underline}
+
+    .chain-toggle{display:flex;gap:8px;margin-bottom:14px;justify-content:center}
+    .ctbtn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 20px;border-radius:var(--rs);cursor:pointer;font-family:'Outfit',sans-serif;font-size:14px;font-weight:700;transition:all .2s;border:1.5px solid var(--border);background:transparent;color:var(--text2)}
+    .ctbtn:hover{background:rgba(255,255,255,.04)}
+    .eth-on{background:rgba(98,126,234,.14);border-color:var(--eth);color:var(--eth)}
+    .bsc-on{background:rgba(243,186,47,.1);border-color:var(--bsc);color:var(--bsc)}
+
+    .addr-row{display:flex;gap:10px}
+    .addr-row input{flex:1;padding:17px 20px;background:rgba(11,17,40,.9);border:1.5px solid var(--border2);border-radius:var(--rs);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:14px;outline:none;transition:border .2s}
+    .addr-row input:focus{border-color:var(--eth)}
+    .addr-row input::placeholder{color:var(--text3)}
+
+    .chain-support{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:20px;flex-wrap:wrap}
+    .chain-support span{font-size:12px;color:var(--text3)}
+
+    .err-bar{display:flex;align-items:flex-start;gap:10px;padding:13px 18px;border-radius:var(--rs);background:rgba(255,64,96,.08);border:1px solid rgba(255,64,96,.25);color:var(--red);font-size:13px;font-weight:500;margin-top:12px;text-align:left}
+
+    /* Debug panel */
+    .debug-panel{margin-top:14px;padding:14px 18px;border-radius:var(--rs);background:rgba(11,17,40,.9);border:1px solid var(--border2);text-align:left;display:none}
+    .debug-panel.show{display:block}
+    .debug-title{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+    .debug-line{font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.8;color:var(--text2)}
+    .debug-line .ok{color:var(--green)}
+    .debug-line .fail{color:var(--red)}
+    .debug-line .warn{color:var(--yellow)}
+
+    /* Features */
+    .section{padding:100px 48px;max-width:1280px;margin:0 auto}
+    .sec-ey{font-size:11px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;color:var(--eth);margin-bottom:12px}
+    .sec-h{font-size:clamp(30px,4vw,52px);font-weight:900;letter-spacing:-1.5px;line-height:1.05;margin-bottom:16px}
+    .feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-top:56px}
+    .feat-card{padding:30px 28px;border-radius:var(--r)}
+    .feat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:18px}
+    .feat-card h3{font-size:16px;font-weight:800;margin-bottom:9px}
+    .feat-card p{font-size:14px;color:var(--text2);line-height:1.65}
+
+    /* Dashboard */
+    .dash{max-width:1380px;margin:0 auto;padding:36px 32px}
+    .dash-hdr{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:28px}
+    .dash-title{font-size:26px;font-weight:900;letter-spacing:-.8px;margin-bottom:6px}
+    .waddr-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .waddr{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text2);word-break:break-all}
+    .dash-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:22px}
+    .stat-card{padding:22px 24px}
+    .stat-lbl{font-size:10px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+    .stat-val{font-size:clamp(16px,2.2vw,22px);font-weight:900;letter-spacing:-.5px;margin-bottom:4px;word-break:break-word}
+    .stat-hint{font-size:11px;color:var(--text3)}
+    .cg{color:var(--green)}.cr{color:var(--red)}.cy{color:var(--yellow)}.cp{color:var(--purple)}
+
+    .filter-card{padding:18px 22px;margin-bottom:20px}
+    .filter-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+    .filter-row:last-child{margin-bottom:0}
+    .fi{padding:9px 14px;background:rgba(11,17,40,.9);border:1px solid var(--border);border-radius:var(--rs);color:var(--text);font-family:'Outfit',sans-serif;font-size:13px;outline:none;transition:border .2s;font-weight:500}
+    .fi:focus{border-color:var(--eth)}
+    .fi::placeholder{color:var(--text3)}
+    .fi-s{flex:1;min-width:180px}
+    select.fi{appearance:none;cursor:pointer;padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7'%3E%3Cpath d='M.5.5l5 5 5-5' stroke='%233d527a' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+    .date-wrap{display:flex;align-items:center;gap:6px}
+    .date-sep{font-size:12px;color:var(--text3)}
+    input[type="date"].fi{color-scheme:dark}
+    .qpills{display:flex;gap:6px;flex-wrap:wrap}
+    .qpill{padding:6px 14px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;transition:all .2s;border:1px solid var(--border);background:transparent;color:var(--text2);font-family:'Outfit',sans-serif}
+    .qpill:hover,.qpill.on{background:rgba(98,126,234,.15);border-color:var(--eth);color:var(--eth)}
+    .tx-ct{margin-left:auto;font-size:12px;color:var(--text3);font-weight:600}
+
+    .tx-thead{display:grid;grid-template-columns:44px 1fr 140px 110px 130px 88px;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border);font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+    .tx-row{display:grid;grid-template-columns:44px 1fr 140px 110px 130px 88px;gap:12px;align-items:center;padding:15px 20px;border-bottom:1px solid rgba(26,40,72,.5);transition:background .15s;cursor:default}
+    .tx-row:hover{background:rgba(255,255,255,.018)}
+    .tx-row:last-child{border-bottom:none}
+    .tx-di{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;flex-shrink:0}
+    .d-in{background:rgba(0,229,160,.1);color:var(--green);border:1px solid rgba(0,229,160,.2)}
+    .d-out{background:rgba(255,64,96,.09);color:var(--red);border:1px solid rgba(255,64,96,.2)}
+    .tx-main{min-width:0}
+    .tx-lbl{font-size:14px;font-weight:700;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+    .tx-sub{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:800;letter-spacing:.8px;text-transform:uppercase}
+    .b-in{background:rgba(0,229,160,.12);color:var(--green);border:1px solid rgba(0,229,160,.2)}
+    .b-out{background:rgba(255,64,96,.1);color:var(--red);border:1px solid rgba(255,64,96,.2)}
+    .b-err{background:rgba(255,209,102,.1);color:var(--yellow);border:1px solid rgba(255,209,102,.2)}
+    .tx-amt{font-size:14px;font-weight:800;text-align:right}
+    .tx-amt.in{color:var(--green)}.tx-amt.out{color:var(--red)}
+    .tx-dt{font-size:12px;color:var(--text2);text-align:right;line-height:1.5}
+    .tx-dt small{color:var(--text3);display:block;font-size:11px}
+    .tx-gas{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);text-align:right}
+    .tx-ac{display:flex;align-items:center;justify-content:flex-end;gap:4px}
+
+    .prog-wrap{padding:48px 24px;text-align:center}
+    .prog-lbl{font-size:13px;color:var(--text2);margin-bottom:14px;font-weight:600}
+    .prog-bg{width:100%;max-width:360px;height:4px;background:var(--surface2);border-radius:99px;margin:0 auto 8px;overflow:hidden}
+    .prog-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--eth),var(--green));transition:width .4s ease}
+    .prog-sub{font-size:11px;color:var(--text3)}
+
+    .empty{text-align:center;padding:80px 20px;color:var(--text2)}
+    .empty .ei{font-size:52px;margin-bottom:16px;opacity:.35}
+    .empty h3{font-size:18px;font-weight:800;margin-bottom:9px;color:var(--text)}
+    .empty p{font-size:14px;max-width:420px;margin:0 auto;line-height:1.65}
+    .empty code{font-family:'JetBrains Mono',monospace;background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px;color:var(--yellow)}
+
+    .pagi{display:flex;align-items:center;gap:6px;justify-content:center;padding:20px}
+    .pgbtn{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s;border:1px solid var(--border);background:transparent;color:var(--text2);font-family:'Outfit',sans-serif;font-size:13px;font-weight:700}
+    .pgbtn:hover:not(:disabled){background:rgba(98,126,234,.15);border-color:var(--eth);color:var(--eth)}
+    .pgbtn:disabled{opacity:.3;cursor:default}
+    .pgbtn.cur{background:rgba(98,126,234,.2);border-color:var(--eth);color:var(--eth)}
+
+    @keyframes shimmer{0%{background-position:-600px 0}100%{background-position:600px 0}}
+    .sk{background:linear-gradient(90deg,var(--surface) 25%,var(--surface2) 50%,var(--surface) 75%);background-size:600px 100%;animation:shimmer 1.6s infinite;border-radius:4px}
+    .sk-row{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid rgba(26,40,72,.5)}
+    .sk-ic{width:38px;height:38px;border-radius:11px;flex-shrink:0}
+    .sk-bd{flex:1}
+    .sk-ln{height:12px;border-radius:4px}
+    .sk-ln.sm{height:10px;margin-top:7px}
+
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin{display:inline-block;width:16px;height:16px;border:2.5px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:spin .75s linear infinite}
+
+    @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+    .fu{animation:fadeUp .5s ease both}
+    .d1{animation-delay:.06s}.d2{animation-delay:.12s}.d3{animation-delay:.18s}.d4{animation-delay:.24s}
+    .d5{animation-delay:.30s}.d6{animation-delay:.36s}.d7{animation-delay:.42s}.d8{animation-delay:.48s}
+
+    #toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface3);border:1px solid var(--border2);color:var(--green);font-size:13px;font-weight:700;padding:10px 22px;border-radius:999px;z-index:999;opacity:0;transition:all .3s;pointer-events:none}
+    #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+    footer{position:relative;z-index:1;text-align:center;padding:44px 24px;border-top:1px solid var(--border)}
+    .footer-logo{font-size:22px;font-weight:900;letter-spacing:-1px;margin-bottom:8px}
+    .footer-logo .a{background:linear-gradient(135deg,var(--green),var(--eth));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    footer p{font-size:13px;color:var(--text3);line-height:1.7}
+    .bez{display:inline-block;margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);letter-spacing:1px;border-top:1px solid var(--border);padding-top:14px}
+    .bez span{color:var(--eth);font-weight:700}
+
+    @media(max-width:900px){
+      nav{padding:14px 20px}
+      .section{padding:60px 20px}
+      .dash{padding:20px 16px}
+      .tx-thead,.tx-row{grid-template-columns:40px 1fr 100px}
+      .tx-thead>*:nth-child(n+4),.tx-row>*:nth-child(n+4){display:none}
+      .stats-grid{grid-template-columns:repeat(2,1fr)}
+    }
+    @media(max-width:600px){
+      .hero h1{letter-spacing:-2px}
+      .addr-row,.chain-toggle,.dash-hdr{flex-direction:column}
+    }
+  </style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+<div class="bg-grid"></div>
+<div class="bg-orb orb1"></div>
+<div class="bg-orb orb2"></div>
+<div class="bg-orb orb3"></div>
+<div id="toast"></div>
+
+<nav>
+  <div class="logo" onclick="goPage('landing')">FLOW<span class="a">FI</span></div>
+  <div class="nav-right">
+    <button class="btn btn-g btn-sm" id="nav-back" style="display:none" onclick="goPage('landing')">← Back</button>
+    <div class="cpill" style="background:rgba(98,126,234,.12);border:1px solid rgba(98,126,234,.3);color:var(--eth)">⟠ ETH</div>
+    <div class="cpill" style="background:rgba(243,186,47,.09);border:1px solid rgba(243,186,47,.3);color:var(--bsc)">◈ BNB</div>
+  </div>
+</nav>
+
+<!-- LANDING -->
+<div id="page-landing" class="page active">
+  <section class="hero">
+    <div class="hero-badge">✦ Web3 Wallet Intelligence Platform</div>
+    <h1><span class="g1">Follow the </span><span class="g2">Flow</span><br><span class="g1">of Your Crypto</span></h1>
+    <p class="hero-sub">Track wallet inflows, outflows, balances, and full blockchain transaction history across Ethereum and BNB Smart Chain with beautiful wallet statements and analytics.</p>
+
+    <div class="input-block">
+      <div class="api-bar">
+        <label id="api-label">⚡ ETHERSCAN API KEY</label>
+        <input type="text" id="api-key-input" placeholder="Paste your free API key here…" />
+        <button class="btn btn-y btn-sm" onclick="testProxy()">Test Connection</button>
+      </div>
+      <p class="api-note">
+        Get a free key → <a href="https://etherscan.io/apis" target="_blank">etherscan.io/apis</a>
+        &nbsp;·&nbsp; <a href="https://bscscan.com/apis" target="_blank">bscscan.com/apis</a>
+      </p>
+
+      <!-- Debug panel -->
+      <div class="debug-panel" id="debug-panel">
+        <div class="debug-title">🔍 Connection Test Results</div>
+        <div class="debug-line" id="debug-lines"></div>
+      </div>
+
+      <div class="chain-toggle" style="margin-top:4px">
+        <button class="ctbtn eth-on" id="btn-eth" onclick="selChain('eth')">⟠ Ethereum Mainnet</button>
+        <button class="ctbtn" id="btn-bsc" onclick="selChain('bsc')">◈ BNB Smart Chain</button>
+      </div>
+      <div class="addr-row">
+        <input type="text" id="addr-input" class="mono" placeholder="0x… paste any EVM wallet address" onkeydown="if(event.key==='Enter')runAnalyze()" />
+        <button class="btn btn-p" id="analyze-btn" onclick="runAnalyze()">Analyze →</button>
+      </div>
+      <div id="err-bar" class="err-bar" style="display:none"><span>⚠️</span><span id="err-msg"></span></div>
+      <div class="chain-support">
+        <span>Supports:</span>
+        <div class="cpill" style="background:rgba(98,126,234,.12);border:1px solid rgba(98,126,234,.28);color:var(--eth)">⟠ Ethereum</div>
+        <div class="cpill" style="background:rgba(243,186,47,.09);border:1px solid rgba(243,186,47,.28);color:var(--bsc)">◈ BNB Chain</div>
+        <div class="cpill" style="background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--text2)">🔒 Mainnet Only</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div style="text-align:center;margin-bottom:4px">
+      <div class="sec-ey">Platform Capabilities</div>
+      <div class="sec-h">Everything you need to<br>understand your wallet</div>
+    </div>
+    <div class="feat-grid">
+      <div class="glass feat-card"><div class="feat-icon" style="background:rgba(98,126,234,.12);border:1px solid rgba(98,126,234,.25)">📊</div><h3>Full Wallet History</h3><p>Fetch every transaction from wallet genesis to now across Ethereum & BNB Chain mainnet.</p></div>
+      <div class="glass feat-card"><div class="feat-icon" style="background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.25)">📄</div><h3>Crypto Bank Statement</h3><p>Beautiful wallet statements showing inflows, outflows and transaction timeline — like a real bank account.</p></div>
+      <div class="glass feat-card"><div class="feat-icon" style="background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.25)">🔍</div><h3>Deep Analytics</h3><p>Net flow, gas spent, most used token, largest transaction, first & last activity dates.</p></div>
+      <div class="glass feat-card"><div class="feat-icon" style="background:rgba(255,64,96,.08);border:1px solid rgba(255,64,96,.22)">📤</div><h3>CSV Export</h3><p>Download filtered transaction statements as CSV for accounting, tax reporting, or personal records.</p></div>
+      <div class="glass feat-card"><div class="feat-icon" style="background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.25)">⚡</div><h3>ERC-20 & BEP-20 Tokens</h3><p>Full token transfer support — USDT, USDC, and every ERC/BEP-20 token in your wallet history.</p></div>
+      <div class="glass feat-card"><div class="feat-icon" style="background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.22)">🛡️</div><h3>Mainnet Only</h3><p>Exclusively real mainnet data. Sepolia, Goerli, Holesky, and BSC Testnet are always excluded.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-logo">FLOW<span class="a">FI</span></div>
+    <p>Web3 Wallet Intelligence · Ethereum & BNB Chain Mainnet Only</p>
+    <p>Data powered by Etherscan & BscScan APIs · Not financial advice</p>
+    <!-- Crafted by Bezalel -->
+    <div class="bez">built with precision by <span>Bezalel</span></div>
+  </footer>
+</div>
+
+<!-- DASHBOARD -->
+<div id="page-dashboard" class="page">
+  <div class="dash">
+    <div class="dash-hdr">
+      <div>
+        <div class="dash-title">Wallet Statement</div>
+        <div class="waddr-row">
+          <span class="waddr mono" id="d-addr"></span>
+          <button class="btn btn-g btn-ic btn-sm" title="Copy address" onclick="copy(document.getElementById('d-addr').textContent)">⎘</button>
+          <a id="d-exp-link" href="#" target="_blank" class="btn btn-g btn-ic btn-sm">↗</a>
+          <div class="cpill" id="d-cpill" style="font-size:12px;font-weight:700;padding:4px 12px"></div>
+        </div>
+      </div>
+      <div class="dash-acts">
+        <button class="btn btn-g btn-sm" id="exp-btn" onclick="exportCSV()" disabled>↓ Export CSV</button>
+        <button class="btn btn-g btn-sm" onclick="goPage('landing')">← New Wallet</button>
+      </div>
+    </div>
+
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <div class="glass filter-card">
+      <div class="filter-row">
+        <input class="fi fi-s" type="text" id="f-search" placeholder="Search hash, token, address…" oninput="applyFilters()" />
+        <select class="fi" id="f-dir" onchange="applyFilters()">
+          <option value="ALL">All Directions</option>
+          <option value="IN">Incoming</option>
+          <option value="OUT">Outgoing</option>
+        </select>
+        <select class="fi" id="f-tok" onchange="applyFilters()"><option value="ALL">All Tokens</option></select>
+        <select class="fi" id="f-sort" onchange="applyFilters()">
+          <option value="desc">Newest First</option>
+          <option value="asc">Oldest First</option>
+        </select>
+      </div>
+      <div class="filter-row">
+        <div class="date-wrap">
+          <input type="date" class="fi" id="f-start" onchange="applyFilters()" />
+          <span class="date-sep">→</span>
+          <input type="date" class="fi" id="f-end" onchange="applyFilters()" />
+        </div>
+        <div class="qpills">
+          <button class="qpill" onclick="qf(this,'30d')">30 Days</button>
+          <button class="qpill" onclick="qf(this,'90d')">90 Days</button>
+          <button class="qpill" onclick="qf(this,'year')">This Year</button>
+          <button class="qpill" onclick="qf(this,'all')">All Time</button>
+        </div>
+        <div class="tx-ct" id="tx-ct"></div>
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="tx-thead">
+        <div></div><div>Transaction</div>
+        <div style="text-align:right">Amount</div>
+        <div style="text-align:right">Date</div>
+        <div style="text-align:right">Gas Fee</div>
+        <div style="text-align:right">Actions</div>
+      </div>
+      <div id="tx-body"></div>
+      <div class="pagi" id="pagi"></div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-logo">FLOW<span class="a">FI</span></div>
+    <p>Ethereum & BNB Chain Mainnet · Data by Etherscan & BscScan</p>
+    <!-- Crafted by Bezalel -->
+    <div class="bez">built with precision by <span>Bezalel</span></div>
+  </footer>
+</div>
+
+<script>
+const CHAINS={
+  eth:{id:'eth',name:'Ethereum',sym:'ETH',proxy:'/api/eth',explorer:'https://etherscan.io',color:'#627EEA',icon:'⟠'},
+  bsc:{id:'bsc',name:'BNB Chain',sym:'BNB',proxy:'/api/bsc',explorer:'https://bscscan.com',color:'#F3BA2F',icon:'◈'},
+};
+
+let S={chain:'eth',address:'',apiKey:'',rawN:[],rawT:[],balance:0,allRows:[],filtRows:[],pg:1,PP:20};
+
+/* Particles */
+(()=>{
+  const c=document.getElementById('bg-canvas'),x=c.getContext('2d');let W,H,pts=[];
+  const res=()=>{W=c.width=window.innerWidth;H=c.height=window.innerHeight};
+  const ini=()=>{pts=[];for(let i=0;i<50;i++)pts.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.22,vy:(Math.random()-.5)*.22,r:Math.random()*1.4+.5,a:Math.random()*.45+.1})};
+  const drw=()=>{
+    x.clearRect(0,0,W,H);
+    pts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;x.beginPath();x.arc(p.x,p.y,p.r,0,Math.PI*2);x.fillStyle=`rgba(98,126,234,${p.a})`;x.fill()});
+    for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<130){x.beginPath();x.moveTo(pts[i].x,pts[i].y);x.lineTo(pts[j].x,pts[j].y);x.strokeStyle=`rgba(98,126,234,${.08*(1-d/130)})`;x.lineWidth=.5;x.stroke()}}
+    requestAnimationFrame(drw);
+  };
+  window.addEventListener('resize',()=>{res();ini()});res();ini();drw();
+})();
+
+const isAddr=a=>/^0x[0-9a-fA-F]{40}$/.test(a);
+const w2e=w=>Number(w)/1e18;
+const fmt=(n,d=4)=>parseFloat(Number(n).toFixed(d)).toLocaleString('en-US',{maximumFractionDigits:d});
+const fmtD=ts=>new Date(ts*1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const fmtT=ts=>new Date(ts*1000).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+const sh=(s,n=8)=>s?`${s.slice(0,n)}…${s.slice(-4)}`:'';
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const $=id=>document.getElementById(id);
+
+function toast(msg,c='var(--green)'){const t=$('toast');t.textContent=msg;t.style.color=c;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200)}
+function copy(txt){navigator.clipboard.writeText(txt).catch(()=>{});toast('✓ Copied')}
+function setErr(msg){$('err-bar').style.display=msg?'flex':'none';$('err-msg').textContent=msg||''}
+
+function selChain(c){
+  S.chain=c;
+  $('btn-eth').className='ctbtn'+(c==='eth'?' eth-on':'');
+  $('btn-bsc').className='ctbtn'+(c==='bsc'?' bsc-on':'');
+  $('api-label').textContent=c==='eth'?'⚡ ETHERSCAN API KEY':'⚡ BSCSCAN API KEY';
+}
+
+function goPage(p){
+  document.querySelectorAll('.page').forEach(e=>e.classList.remove('active'));
+  $('page-'+p).classList.add('active');
+  $('nav-back').style.display=p==='dashboard'?'inline-flex':'none';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ── Proxy fetch with full error info ── */
+async function pfetch(chain, params){
+  const ch=CHAINS[chain];
+  const qs=new URLSearchParams(params).toString();
+  const url=`${ch.proxy}?${qs}`;
+
+  let resp;
+  try{
+    resp=await fetch(url);
+  }catch(e){
+    throw new Error(`Network error calling ${ch.proxy}: ${e.message}. Make sure the api/ folder is deployed on Vercel.`);
+  }
+
+  if(!resp.ok){
+    const text=await resp.text().catch(()=>'');
+    throw new Error(`Proxy returned HTTP ${resp.status}. ${text.slice(0,120)}`);
+  }
+
+  let data;
+  try{
+    data=await resp.json();
+  }catch(e){
+    throw new Error(`Proxy returned non-JSON response. The api/ files may not be deployed yet.`);
+  }
+
+  return data;
+}
+
+/* ── Test proxy connection ── */
+async function testProxy(){
+  const apiKey=$('api-key-input').value.trim();
+  const chain=S.chain;
+  const panel=$('debug-panel');
+  const lines=$('debug-lines');
+  panel.classList.add('show');
+  lines.innerHTML='<span class="warn">⏳ Testing connection…</span>';
+
+  const log=(msg,type='')=>{
+    lines.innerHTML+=`<br><span class="${type}">${msg}</span>`;
+  };
+
+  try{
+    // Test 1: can we reach the proxy at all?
+    lines.innerHTML='';
+    log(`Testing proxy endpoint: ${CHAINS[chain].proxy}…`,'');
+
+    const testAddr='0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'; // vitalik.eth - always has txns
+    const d=await pfetch(chain,{module:'account',action:'txlist',address:testAddr,startblock:0,endblock:99999999,page:1,offset:5,sort:'desc',apikey:apiKey||'YourApiKeyToken'});
+
+    log(`✓ Proxy reachable`,'ok');
+    log(`API status: ${d.status} — message: ${d.message}`,'');
+
+    if(d.status==='1'){
+      log(`✓ API key is working — got ${d.result?.length} test transactions`,'ok');
+    } else if(d.message?.includes('NOTOK')||d.message?.includes('Invalid')){
+      log(`✗ API key rejected: ${d.message}`,'fail');
+      log(`→ Double-check your key at etherscan.io/myapikey`,'warn');
+    } else if(d.message?.includes('No transactions')){
+      log(`✓ Proxy working — test address returned no results (unusual)`,'warn');
+    } else {
+      log(`API response: ${JSON.stringify(d).slice(0,200)}`,'warn');
+    }
+
+    // Test 2: check balance endpoint
+    const bd=await pfetch(chain,{module:'account',action:'balance',address:testAddr,tag:'latest',apikey:apiKey||'YourApiKeyToken'});
+    if(bd.status==='1'){
+      log(`✓ Balance endpoint working`,'ok');
+    } else {
+      log(`✗ Balance endpoint issue: ${bd.message}`,'fail');
+    }
+
+    log('─────────────────────────','');
+    if(d.status==='1'){
+      log('✅ Everything looks good! Enter a wallet address and click Analyze.','ok');
+    } else {
+      log('⚠️ Fix the API key issue above then try again.','warn');
+    }
+
+  }catch(e){
+    lines.innerHTML='';
+    log(`✗ ${e.message}`,'fail');
+    log('','');
+    log('This usually means the api/ folder is NOT deployed on Vercel yet.','warn');
+    log('Make sure your project has: api/eth.js and api/bsc.js','warn');
+    log('Then push to GitHub and redeploy.','warn');
+  }
+}
+
+/* ── Progress ── */
+function upProg(pct,lbl){
+  const f=$('prog-fill'),l=$('prog-lbl');
+  if(f)f.style.width=pct+'%';
+  if(l)l.textContent=lbl;
+}
+
+/* ── Fetch all ── */
+async function fetchAll(addr,chain,apiKey){
+  const key=apiKey||'';
+  let normal=[],tokens=[],page=1;
+
+  upProg(5,'Connecting to blockchain…');
+  while(true){
+    const d=await pfetch(chain,{module:'account',action:'txlist',address:addr,startblock:0,endblock:99999999,page,offset:100,sort:'asc',apikey:key});
+    if(d.status!=='1'||!Array.isArray(d.result)||!d.result.length)break;
+    normal=normal.concat(d.result);
+    upProg(Math.min(40,5+normal.length/4),`Fetched ${normal.length} transactions…`);
+    if(d.result.length<100)break;
+    page++;await sleep(250);
+  }
+
+  page=1;
+  upProg(45,'Fetching token transfers…');
+  while(true){
+    const d=await pfetch(chain,{module:'account',action:'tokentx',address:addr,startblock:0,endblock:99999999,page,offset:100,sort:'asc',apikey:key});
+    if(d.status!=='1'||!Array.isArray(d.result)||!d.result.length)break;
+    tokens=tokens.concat(d.result);
+    upProg(Math.min(78,45+tokens.length/4),`Fetched ${tokens.length} token transfers…`);
+    if(d.result.length<100)break;
+    page++;await sleep(250);
+  }
+
+  upProg(85,'Fetching balance…');
+  const bd=await pfetch(chain,{module:'account',action:'balance',address:addr,tag:'latest',apikey:key});
+  const balance=bd.status==='1'?w2e(bd.result):0;
+  upProg(100,'Complete!');
+  return{normal,tokens,balance};
+}
+
+/* ── Process rows ── */
+function procRows(addr,normal,tokens,chain,sd,ed){
+  const a=addr.toLowerCase(),sym=CHAINS[chain].sym,cn=CHAINS[chain].name;
+  const toR=(tx,isTok)=>{
+    const ts=parseInt(tx.timeStamp),dir=tx.from.toLowerCase()===a?'OUT':'IN';
+    let amount,token;
+    if(isTok){const dec=parseInt(tx.tokenDecimal)||18;amount=Number(tx.value)/Math.pow(10,dec);token=tx.tokenSymbol||'TOKEN';}
+    else{amount=w2e(tx.value);token=sym;}
+    const gas=w2e((tx.gasPrice||0)*(tx.gasUsed||0));
+    return{hash:tx.hash,ts,date:fmtD(ts),time:fmtT(ts),token,amount,direction:dir,from:tx.from,to:tx.to,gasFee:gas.toFixed(6),chain:cn,isTok,isErr:tx.isError==='1'};
+  };
+  const tHash=new Set(tokens.map(t=>t.hash));
+  let rows=[
+    ...normal.filter(t=>!tHash.has(t.hash)).map(t=>toR(t,false)),
+    ...tokens.map(t=>toR(t,true)),
+  ];
+  rows.sort((a,b)=>a.ts-b.ts);
+  if(sd){const s=new Date(sd).getTime()/1000;rows=rows.filter(r=>r.ts>=s);}
+  if(ed){const e=new Date(ed).getTime()/1000+86399;rows=rows.filter(r=>r.ts<=e);}
+  return rows;
+}
+
+function calcAnalytics(rows,balance,chain){
+  const sym=CHAINS[chain].sym;let tIn=0,tOut=0,tGas=0,tc={},lg=null;
+  rows.forEach(r=>{if(r.isErr)return;if(r.direction==='IN')tIn+=parseFloat(r.amount)||0;else tOut+=parseFloat(r.amount)||0;tGas+=parseFloat(r.gasFee)||0;tc[r.token]=(tc[r.token]||0)+1;if(!lg||parseFloat(r.amount)>parseFloat(lg.amount))lg=r;});
+  const mu=Object.entries(tc).sort((a,b)=>b[1]-a[1])[0]?.[0]||sym;
+  return{tIn,tOut,net:tIn-tOut,tGas,balance,total:rows.length,mu,firstDate:rows[0]?.date||'—',lastDate:rows[rows.length-1]?.date||'—'};
+}
+
+function renderStats(a,chain){
+  const sym=CHAINS[chain].sym,net=a.net;
+  const cards=[
+    {l:'Current Balance',v:`${fmt(a.balance,6)} ${sym}`,h:'Live on-chain',c:'cg'},
+    {l:'Total Received',v:`+${fmt(a.tIn,4)} ${sym}`,h:`${a.total} transactions`,c:'cg'},
+    {l:'Total Sent',v:`-${fmt(a.tOut,4)} ${sym}`,h:'Outbound transfers',c:'cr'},
+    {l:'Net Flow',v:`${net>=0?'+':''}${fmt(net,4)} ${sym}`,h:'In minus out',c:net>=0?'cg':'cr'},
+    {l:'Gas Fees Spent',v:`${fmt(a.tGas,5)} ${sym}`,h:'Total gas costs',c:'cy'},
+    {l:'Most Used Token',v:a.mu,h:'By tx count',c:'cp'},
+    {l:'First Activity',v:a.firstDate,h:'Wallet genesis',c:''},
+    {l:'Last Activity',v:a.lastDate,h:'Most recent tx',c:''},
+  ];
+  $('stats-grid').innerHTML=cards.map((s,i)=>`
+    <div class="glass stat-card fu d${i+1}">
+      <div class="stat-lbl">${s.l}</div>
+      <div class="stat-val ${s.c}">${esc(s.v)}</div>
+      <div class="stat-hint">${s.h}</div>
+    </div>`).join('');
+}
+
+function buildTokFilter(rows){
+  const toks=['ALL',...new Set(rows.map(r=>r.token))];
+  $('f-tok').innerHTML=toks.map(t=>`<option value="${esc(t)}">${t==='ALL'?'All Tokens':esc(t)}</option>`).join('');
+}
+
+function applyFilters(){
+  const search=$('f-search').value.toLowerCase();
+  const dir=$('f-dir').value,tok=$('f-tok').value,sort=$('f-sort').value;
+  const sd=$('f-start').value,ed=$('f-end').value;
+  let rows=procRows(S.address,S.rawN,S.rawT,S.chain,sd,ed);
+  rows=rows.filter(r=>{
+    if(dir!=='ALL'&&r.direction!==dir)return false;
+    if(tok!=='ALL'&&r.token!==tok)return false;
+    if(search&&!r.hash.includes(search)&&!r.token.toLowerCase().includes(search)&&!r.from.includes(search)&&!r.to.includes(search))return false;
+    return true;
+  });
+  rows.sort((a,b)=>sort==='desc'?b.ts-a.ts:a.ts-b.ts);
+  S.filtRows=rows;S.pg=1;
+  $('tx-ct').textContent=`${rows.length.toLocaleString()} transactions`;
+  renderTxPg();
+}
+
+function qf(btn,f){
+  const now=new Date();let s='',e=now.toISOString().slice(0,10);
+  if(f==='30d')s=new Date(now-30*864e5).toISOString().slice(0,10);
+  if(f==='90d')s=new Date(now-90*864e5).toISOString().slice(0,10);
+  if(f==='year')s=`${now.getFullYear()}-01-01`;
+  if(f==='all'){s='';e='';}
+  $('f-start').value=s;$('f-end').value=e;
+  document.querySelectorAll('.qpill').forEach(p=>p.classList.remove('on'));
+  btn.classList.add('on');applyFilters();
+}
+
+function renderTxPg(){
+  const{filtRows:rows,pg,PP}=S,ch=CHAINS[S.chain];
+  const slice=rows.slice((pg-1)*PP,pg*PP),total=Math.ceil(rows.length/PP);
+  const body=$('tx-body');
+  if(!rows.length){body.innerHTML=`<div class="empty"><div class="ei">🔍</div><h3>No transactions found</h3><p>Try adjusting your date range or filters.</p></div>`;$('pagi').innerHTML='';return;}
+  body.innerHTML=slice.map((tx,i)=>`
+    <div class="tx-row fu" style="animation-delay:${i*.028}s">
+      <div class="tx-di ${tx.direction==='IN'?'d-in':'d-out'}">${tx.direction==='IN'?'↓':'↑'}</div>
+      <div class="tx-main">
+        <div class="tx-lbl"><span>${tx.direction==='IN'?'Received':'Sent'} ${esc(tx.token)}</span>
+          <span class="badge ${tx.direction==='IN'?'b-in':'b-out'}">${tx.direction}</span>
+          ${tx.isErr?'<span class="badge b-err">FAILED</span>':''}
+        </div>
+        <div class="tx-sub mono">${tx.direction==='IN'?'From: '+sh(tx.from):'To: '+sh(tx.to)} · ${sh(tx.hash,10)}</div>
+      </div>
+      <div class="tx-amt ${tx.direction.toLowerCase()}">${tx.direction==='IN'?'+':'-'}${fmt(tx.amount)} ${esc(tx.token)}</div>
+      <div class="tx-dt">${tx.date}<small>${tx.time}</small></div>
+      <div class="tx-gas mono">${tx.gasFee} ${ch.sym}</div>
+      <div class="tx-ac">
+        <button class="btn btn-g btn-ic btn-sm" title="Copy hash" onclick="copy('${tx.hash}')">⎘</button>
+        <a href="${ch.explorer}/tx/${tx.hash}" target="_blank" class="btn btn-g btn-ic btn-sm">↗</a>
+      </div>
+    </div>`).join('');
+
+  const pagi=$('pagi');
+  if(total<=1){pagi.innerHTML='';return;}
+  const s=Math.max(1,pg-3),e2=Math.min(total,pg+3);
+  let h=`<button class="pgbtn" ${pg===1?'disabled':''} onclick="pgGo(1)">«</button>`;
+  h+=`<button class="pgbtn" ${pg===1?'disabled':''} onclick="pgGo(${pg-1})">‹</button>`;
+  for(let i=s;i<=e2;i++)h+=`<button class="pgbtn ${i===pg?'cur':''}" onclick="pgGo(${i})">${i}</button>`;
+  h+=`<button class="pgbtn" ${pg===total?'disabled':''} onclick="pgGo(${pg+1})">›</button>`;
+  h+=`<button class="pgbtn" ${pg===total?'disabled':''} onclick="pgGo(${total})">»</button>`;
+  pagi.innerHTML=h;
+}
+function pgGo(n){S.pg=n;renderTxPg();document.querySelector('.glass.filter-card + .glass').scrollIntoView({behavior:'smooth',block:'start'})}
+
+function skelStats(){$('stats-grid').innerHTML=Array(8).fill(`<div class="glass stat-card"><div class="sk sk-ln" style="width:55%;margin-bottom:12px"></div><div class="sk sk-ln" style="width:75%;height:20px"></div></div>`).join('')}
+function skelTx(){$('tx-body').innerHTML=`<div class="prog-wrap"><div class="prog-lbl" id="prog-lbl">Connecting to blockchain…</div><div class="prog-bg"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div><div class="prog-sub">This may take a moment for large wallets</div></div>`;$('pagi').innerHTML=''}
+
+async function runAnalyze(){
+  const addr=$('addr-input').value.trim();
+  const apiKey=$('api-key-input').value.trim();
+  const chain=S.chain;
+  setErr('');
+  if(!isAddr(addr)){setErr('Invalid EVM address. Must start with 0x followed by 40 hex characters.');return;}
+
+  S.address=addr;S.apiKey=apiKey;S.chain=chain;
+  const ch=CHAINS[chain];
+  $('d-addr').textContent=addr;
+  $('d-exp-link').href=`${ch.explorer}/address/${addr}`;
+  $('d-cpill').textContent=`${ch.icon} ${ch.name}`;
+  $('d-cpill').style.cssText=`background:${ch.color}18;border:1px solid ${ch.color}35;color:${ch.color};font-size:12px;font-weight:700;padding:4px 12px`;
+
+  goPage('dashboard');
+  skelStats();skelTx();
+
+  const btn=$('analyze-btn');btn.disabled=true;btn.innerHTML='<span class="spin"></span> Analyzing…';
+
+  try{
+    const{normal,tokens,balance}=await fetchAll(addr,chain,apiKey);
+    S.rawN=normal;S.rawT=tokens;S.balance=balance;
+
+    ['f-search','f-start','f-end'].forEach(id=>$(id).value='');
+    $('f-dir').value='ALL';$('f-sort').value='desc';
+    document.querySelectorAll('.qpill').forEach(p=>p.classList.remove('on'));
+
+    const rows=procRows(addr,normal,tokens,chain,'','');
+    rows.sort((a,b)=>b.ts-a.ts);
+    S.allRows=rows;S.filtRows=rows;
+
+    buildTokFilter(rows);
+    renderStats(calcAnalytics(rows,balance,chain),chain);
+    $('tx-ct').textContent=`${rows.length.toLocaleString()} transactions`;
+    $('exp-btn').disabled=rows.length===0;
+
+    if(!rows.length){
+      $('tx-body').innerHTML=`
+        <div class="empty">
+          <div class="ei">📭</div>
+          <h3>No transactions found</h3>
+          <p>
+            The API returned 0 transactions for this wallet on <strong>${ch.name} mainnet</strong>.<br><br>
+            Try these steps:<br>
+            1. Go back and click <strong>"Test Connection"</strong> to verify your API key works.<br>
+            2. Make sure you selected the right chain (ETH vs BNB).<br>
+            3. Check the wallet on <a href="${ch.explorer}/address/${addr}" target="_blank" style="color:var(--eth)">${ch.name === 'Ethereum' ? 'Etherscan' : 'BscScan'}</a> directly.
+          </p>
+        </div>`;
+      $('pagi').innerHTML='';
+    }else{
+      renderTxPg();
+    }
+  }catch(e){
+    $('tx-body').innerHTML=`
+      <div class="empty">
+        <div class="ei">⚠️</div>
+        <h3>Could not fetch data</h3>
+        <p style="color:var(--red);font-family:'JetBrains Mono',monospace;font-size:12px;margin-bottom:16px">${esc(e.message)}</p>
+        <p>Go back and click <strong>"Test Connection"</strong> to diagnose the issue.</p>
+      </div>`;
+    $('stats-grid').innerHTML='';
+  }
+
+  btn.disabled=false;btn.innerHTML='Analyze →';
+}
+
+function exportCSV(){
+  const rows=S.filtRows;if(!rows.length)return;
+  const ch=CHAINS[S.chain];
+  const lines=[['Hash','Date','Time','Token','Amount','Direction','From','To',`Gas (${ch.sym})`,'Chain'].join(',')];
+  rows.forEach(r=>lines.push([r.hash,r.date,r.time,r.token,r.amount,r.direction,r.from,r.to,r.gasFee,r.chain].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`flowfi-${S.address.slice(0,8)}-${S.chain}-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();toast('✓ CSV exported');
+}
+</script>
+</body>
+</html>
