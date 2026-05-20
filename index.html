@@ -133,8 +133,8 @@
     .qpill:hover,.qpill.on{background:rgba(98,126,234,.15);border-color:var(--eth);color:var(--eth)}
     .tx-ct{margin-left:auto;font-size:12px;color:var(--text3);font-weight:600}
 
-    .tx-thead{display:grid;grid-template-columns:44px 1fr 140px 110px 130px 88px;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border);font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
-    .tx-row{display:grid;grid-template-columns:44px 1fr 140px 110px 130px 88px;gap:12px;align-items:center;padding:15px 20px;border-bottom:1px solid rgba(26,40,72,.5);transition:background .15s;cursor:default}
+    .tx-thead{display:grid;grid-template-columns:44px 1fr 140px 130px 110px 130px 88px;gap:12px;padding:11px 20px;border-bottom:1px solid var(--border);font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3)}
+    .tx-row{display:grid;grid-template-columns:44px 1fr 140px 130px 110px 130px 88px;gap:12px;align-items:center;padding:15px 20px;border-bottom:1px solid rgba(26,40,72,.5);transition:background .15s;cursor:default}
     .tx-row:hover{background:rgba(255,255,255,.018)}
     .tx-row:last-child{border-bottom:none}
     .tx-di{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;flex-shrink:0}
@@ -349,7 +349,8 @@
     <div class="glass">
       <div class="tx-thead">
         <div></div><div>Transaction</div>
-        <div style="text-align:right">Amount</div>
+        <div style="text-align:right">Token Amount</div>
+        <div style="text-align:right" id="eth-col-hdr">ETH Value</div>
         <div style="text-align:right">Date</div>
         <div style="text-align:right">Gas Fee</div>
         <div style="text-align:right">Actions</div>
@@ -408,6 +409,8 @@ function selChain(c){
   $('btn-eth').className='ctbtn'+(c==='eth'?' eth-on':'');
   $('btn-bsc').className='ctbtn'+(c==='bsc'?' bsc-on':'');
   $('api-label').textContent=c==='eth'?'⚡ ETHERSCAN API KEY':'⚡ BSCSCAN API KEY';
+  const hdr=$('eth-col-hdr');
+  if(hdr) hdr.textContent=c==='eth'?'ETH Value':'BNB Value';
 }
 
 function goPage(p){
@@ -455,53 +458,89 @@ async function testProxy(){
   lines.innerHTML='<span class="warn">⏳ Testing connection…</span>';
 
   const log=(msg,type='')=>{
-    lines.innerHTML+=`<br><span class="${type}">${msg}</span>`;
+    lines.innerHTML+=`<br><span class="${type}">${esc(msg)}</span>`;
   };
 
+  // Known active wallet on both chains for testing
+  const testAddrs={
+    eth:'0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', // vitalik.eth
+    bsc:'0x8894E0a0c962CB723c1976a4421c95949bE2D4E3', // binance hot wallet
+  };
+  const testAddr=testAddrs[chain];
+  const ch=CHAINS[chain];
+
+  lines.innerHTML='';
+  log(`Chain: ${ch.name}`,'');
+  log(`Proxy: ${ch.proxy}`,'');
+  log(`API key entered: ${apiKey ? 'YES ('+apiKey.length+' chars)' : 'NO — will try without key'}`,'');
+  log('─────────────────────────','');
+
   try{
-    // Test 1: can we reach the proxy at all?
-    lines.innerHTML='';
-    log(`Testing proxy endpoint: ${CHAINS[chain].proxy}…`,'');
+    // Step 1 — test balance (lightest call)
+    log('Step 1: Testing balance endpoint…','');
+    const params={module:'account',action:'balance',address:testAddr,tag:'latest'};
+    if(apiKey) params.apikey=apiKey;
 
-    const testAddr='0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045'; // vitalik.eth - always has txns
-    const d=await pfetch(chain,{module:'account',action:'txlist',address:testAddr,startblock:0,endblock:99999999,page:1,offset:5,sort:'desc',apikey:apiKey||'YourApiKeyToken'});
+    const bd=await pfetch(chain,params);
+    log(`  Raw response: status=${bd.status} message="${bd.message}" result="${String(bd.result).slice(0,40)}"`,bd.status==='1'?'ok':'warn');
 
-    log(`✓ Proxy reachable`,'ok');
-    log(`API status: ${d.status} — message: ${d.message}`,'');
-
-    if(d.status==='1'){
-      log(`✓ API key is working — got ${d.result?.length} test transactions`,'ok');
-    } else if(d.message?.includes('NOTOK')||d.message?.includes('Invalid')){
-      log(`✗ API key rejected: ${d.message}`,'fail');
-      log(`→ Double-check your key at etherscan.io/myapikey`,'warn');
-    } else if(d.message?.includes('No transactions')){
-      log(`✓ Proxy working — test address returned no results (unusual)`,'warn');
-    } else {
-      log(`API response: ${JSON.stringify(d).slice(0,200)}`,'warn');
-    }
-
-    // Test 2: check balance endpoint
-    const bd=await pfetch(chain,{module:'account',action:'balance',address:testAddr,tag:'latest',apikey:apiKey||'YourApiKeyToken'});
     if(bd.status==='1'){
-      log(`✓ Balance endpoint working`,'ok');
+      log('  ✓ Balance endpoint works — API key is valid','ok');
     } else {
-      log(`✗ Balance endpoint issue: ${bd.message}`,'fail');
+      log(`  ✗ Balance failed: "${bd.message}"`, 'fail');
+      // Decode common Etherscan error codes
+      if(bd.result==='Max rate limit reached'){
+        log('  → Rate limit hit. Wait 10 seconds and try again.','warn');
+      } else if(String(bd.result).toLowerCase().includes('invalid api key')||bd.message==='NOTOK'){
+        log('  → The API key was rejected by Etherscan.','fail');
+        log('  → Common fixes:','warn');
+        log('    1. New keys take up to 5 minutes to activate after creation','warn');
+        log('    2. Make sure you copied the full key with no spaces','warn');
+        log('    3. Try adding the key to Vercel env vars instead:','warn');
+        log(`       Vercel → Settings → Env Vars → ETHERSCAN_API_KEY`,'warn');
+        log('    4. Or try WITHOUT a key — the proxy now supports keyless mode','warn');
+      }
     }
 
     log('─────────────────────────','');
-    if(d.status==='1'){
-      log('✅ Everything looks good! Enter a wallet address and click Analyze.','ok');
+
+    // Step 2 — test tx list
+    log('Step 2: Testing transaction list…','');
+    const params2={module:'account',action:'txlist',address:testAddr,startblock:0,endblock:99999999,page:1,offset:3,sort:'desc'};
+    if(apiKey) params2.apikey=apiKey;
+
+    const d=await pfetch(chain,params2);
+    log(`  Raw response: status=${d.status} message="${d.message}" count=${Array.isArray(d.result)?d.result.length:'n/a'}`,d.status==='1'?'ok':'warn');
+
+    if(d.status==='1'&&Array.isArray(d.result)&&d.result.length>0){
+      log(`  ✓ Got ${d.result.length} transactions — everything working!`,'ok');
+    } else if(d.message==='No transactions found'){
+      log('  ✓ Endpoint works (test wallet had no txns on this chain)','ok');
     } else {
-      log('⚠️ Fix the API key issue above then try again.','warn');
+      log(`  ✗ TX list failed: ${d.message||JSON.stringify(d).slice(0,100)}`,'fail');
+    }
+
+    log('─────────────────────────','');
+
+    const allGood=(bd.status==='1'||bd.message==='No transactions found')&&(d.status==='1'||d.message==='No transactions found');
+    if(allGood){
+      log('✅ Connection working! You can now analyze any wallet.','ok');
+    } else {
+      log('⚠️ See issues above. Try without API key first (leave the field blank).','warn');
     }
 
   }catch(e){
     lines.innerHTML='';
-    log(`✗ ${e.message}`,'fail');
+    log(`✗ Network error: ${e.message}`,'fail');
     log('','');
-    log('This usually means the api/ folder is NOT deployed on Vercel yet.','warn');
-    log('Make sure your project has: api/eth.js and api/bsc.js','warn');
-    log('Then push to GitHub and redeploy.','warn');
+    log('→ The api/ proxy files are likely not deployed yet.','warn');
+    log('  Make sure your project structure is:','warn');
+    log('  flowfi/','warn');
+    log('  ├── index.html','warn');
+    log('  └── api/','warn');
+    log('      ├── eth.js','warn');
+    log('      └── bsc.js','warn');
+    log('  Then git add . → git commit → git push → Vercel redeploys.','warn');
   }
 }
 
@@ -569,19 +608,31 @@ function procRows(addr,normal,tokens,chain,sd,ed){
 
 function calcAnalytics(rows,balance,chain){
   const sym=CHAINS[chain].sym;let tIn=0,tOut=0,tGas=0,tc={},lg=null;
-  rows.forEach(r=>{if(r.isErr)return;if(r.direction==='IN')tIn+=parseFloat(r.amount)||0;else tOut+=parseFloat(r.amount)||0;tGas+=parseFloat(r.gasFee)||0;tc[r.token]=(tc[r.token]||0)+1;if(!lg||parseFloat(r.amount)>parseFloat(lg.amount))lg=r;});
+  rows.forEach(r=>{
+    if(r.isErr)return;
+    // Only count native coin (ETH/BNB) for tIn/tOut totals, not tokens
+    if(!r.isTok){
+      if(r.direction==='IN')tIn+=parseFloat(r.amount)||0;
+      else tOut+=parseFloat(r.amount)||0;
+    }
+    tGas+=parseFloat(r.gasFee)||0;
+    tc[r.token]=(tc[r.token]||0)+1;
+    if(!lg||parseFloat(r.amount)>parseFloat(lg.amount))lg=r;
+  });
   const mu=Object.entries(tc).sort((a,b)=>b[1]-a[1])[0]?.[0]||sym;
-  return{tIn,tOut,net:tIn-tOut,tGas,balance,total:rows.length,mu,firstDate:rows[0]?.date||'—',lastDate:rows[rows.length-1]?.date||'—'};
+  // Sort by timestamp to get true first and last activity
+  const sorted=[...rows].sort((a,b)=>a.ts-b.ts);
+  return{tIn,tOut,net:tIn-tOut,tGas,balance,total:rows.length,mu,firstDate:sorted[0]?.date||'—',lastDate:sorted[sorted.length-1]?.date||'—'};
 }
 
 function renderStats(a,chain){
   const sym=CHAINS[chain].sym,net=a.net;
   const cards=[
     {l:'Current Balance',v:`${fmt(a.balance,6)} ${sym}`,h:'Live on-chain',c:'cg'},
-    {l:'Total Received',v:`+${fmt(a.tIn,4)} ${sym}`,h:`${a.total} transactions`,c:'cg'},
-    {l:'Total Sent',v:`-${fmt(a.tOut,4)} ${sym}`,h:'Outbound transfers',c:'cr'},
-    {l:'Net Flow',v:`${net>=0?'+':''}${fmt(net,4)} ${sym}`,h:'In minus out',c:net>=0?'cg':'cr'},
-    {l:'Gas Fees Spent',v:`${fmt(a.tGas,5)} ${sym}`,h:'Total gas costs',c:'cy'},
+    {l:`Total Received (${sym})`,v:`+${fmt(a.tIn,6)} ${sym}`,h:`${a.total} transactions`,c:'cg'},
+    {l:`Total Sent (${sym})`,v:`-${fmt(a.tOut,6)} ${sym}`,h:'Outbound transfers',c:'cr'},
+    {l:`Net Flow (${sym})`,v:`${net>=0?'+':''}${fmt(net,6)} ${sym}`,h:'In minus out',c:net>=0?'cg':'cr'},
+    {l:`Gas Fees (${sym})`,v:`${fmt(a.tGas,6)} ${sym}`,h:'Total gas costs',c:'cy'},
     {l:'Most Used Token',v:a.mu,h:'By tx count',c:'cp'},
     {l:'First Activity',v:a.firstDate,h:'Wallet genesis',c:''},
     {l:'Last Activity',v:a.lastDate,h:'Most recent tx',c:''},
@@ -643,6 +694,7 @@ function renderTxPg(){
         <div class="tx-sub mono">${tx.direction==='IN'?'From: '+sh(tx.from):'To: '+sh(tx.to)} · ${sh(tx.hash,10)}</div>
       </div>
       <div class="tx-amt ${tx.direction.toLowerCase()}">${tx.direction==='IN'?'+':'-'}${fmt(tx.amount)} ${esc(tx.token)}</div>
+      <div class="tx-eth ${tx.isTok?'':'tx-amt '+tx.direction.toLowerCase()}" style="text-align:right;font-size:13px;font-weight:700">${tx.isTok?`<span style="color:var(--text3);font-size:11px;font-family:'JetBrains Mono',monospace">— ${ch.sym}</span>`:`${tx.direction==='IN'?'+':'-'}${fmt(tx.amount,6)} ${ch.sym}`}</div>
       <div class="tx-dt">${tx.date}<small>${tx.time}</small></div>
       <div class="tx-gas mono">${tx.gasFee} ${ch.sym}</div>
       <div class="tx-ac">
