@@ -607,7 +607,7 @@ function procRows(addr,normal,tokens,chain,sd,ed){
 }
 
 function calcAnalytics(rows,balance,chain){
-  const sym=CHAINS[chain].sym;let tIn=0,tOut=0,tGas=0,tc={},lg=null;
+  const sym=CHAINS[chain].sym;let tIn=0,tOut=0,tGas=0,tc={},tAmts={},lg=null;
   rows.forEach(r=>{
     if(r.isErr)return;
     // Only count native coin (ETH/BNB) for tIn/tOut totals, not tokens
@@ -617,12 +617,17 @@ function calcAnalytics(rows,balance,chain){
     }
     tGas+=parseFloat(r.gasFee)||0;
     tc[r.token]=(tc[r.token]||0)+1;
+    // Track per-token in/out amounts
+    if(!tAmts[r.token])tAmts[r.token]={in:0,out:0};
+    if(r.direction==='IN')tAmts[r.token].in+=parseFloat(r.amount)||0;
+    else tAmts[r.token].out+=parseFloat(r.amount)||0;
     if(!lg||parseFloat(r.amount)>parseFloat(lg.amount))lg=r;
   });
   const mu=Object.entries(tc).sort((a,b)=>b[1]-a[1])[0]?.[0]||sym;
+  const muAmts=tAmts[mu]||{in:0,out:0};
   // Sort by timestamp to get true first and last activity
   const sorted=[...rows].sort((a,b)=>a.ts-b.ts);
-  return{tIn,tOut,net:tIn-tOut,tGas,balance,total:rows.length,mu,firstDate:sorted[0]?.date||'—',lastDate:sorted[sorted.length-1]?.date||'—'};
+  return{tIn,tOut,net:tIn-tOut,tGas,balance,total:rows.length,mu,muIn:muAmts.in,muOut:muAmts.out,firstDate:sorted[0]?.date||'—',lastDate:sorted[sorted.length-1]?.date||'—'};
 }
 
 function renderStats(a,chain){
@@ -633,7 +638,7 @@ function renderStats(a,chain){
     {l:`Total Sent (${sym})`,v:`-${fmt(a.tOut,6)} ${sym}`,h:'Outbound transfers',c:'cr'},
     {l:`Net Flow (${sym})`,v:`${net>=0?'+':''}${fmt(net,6)} ${sym}`,h:'In minus out',c:net>=0?'cg':'cr'},
     {l:`Gas Fees (${sym})`,v:`${fmt(a.tGas,6)} ${sym}`,h:'Total gas costs',c:'cy'},
-    {l:'Most Used Token',v:a.mu,h:'By tx count',c:'cp'},
+    {l:'Most Used Token',v:a.mu,h:`↓ In: ${fmt(a.muIn,2)} · ↑ Out: ${fmt(a.muOut,2)}`,c:'cp'},
     {l:'First Activity',v:a.firstDate,h:'Wallet genesis',c:''},
     {l:'Last Activity',v:a.lastDate,h:'Most recent tx',c:''},
   ];
